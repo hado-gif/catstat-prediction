@@ -6,10 +6,18 @@ import socketserver
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
+
+try:
+	import matplotlib.pyplot as plt
+except Exception:
+	plt = None  # type: ignore[assignment]
+
+try:
+	import seaborn as sns
+except Exception:
+	sns = None  # type: ignore[assignment]
 
 
 # All legal pre-pitch count states for MLB/NCAA baseball.
@@ -528,6 +536,10 @@ def save_pitcher_heatmaps(
 	min_total_pitches_per_pitcher: int = 25,
 ) -> None:
 	"""Save one heatmap per pitcher showing pitch-type probability by count."""
+	if plt is None or sns is None:
+		print("[WARN] Heatmap generation skipped: matplotlib/seaborn not available.")
+		return
+
 	output_dir.mkdir(parents=True, exist_ok=True)
 	sns.set_theme(style="whitegrid")
 
@@ -611,38 +623,43 @@ def generate_data_js(
 	"""
 	import json
 
-	import matplotlib
-	matplotlib.use("Agg")
+	can_plot = plt is not None and sns is not None
+	if can_plot:
+		import matplotlib
+		matplotlib.use("Agg")
 
 	output_dir.mkdir(parents=True, exist_ok=True)
 	heatmap_dir = output_dir / "heatmaps"
 	heatmap_dir.mkdir(parents=True, exist_ok=True)
 
-	sns.set_theme(style="whitegrid")
-	totals = (
-		tendencies_long[["Pitcher", "PitchCount"]]
-		.groupby("Pitcher", as_index=False)
-		.sum()
-		.rename(columns={"PitchCount": "TotalPitches"})
-	)
-	eligible = set(totals.loc[totals["TotalPitches"] >= min_heatmap_pitches, "Pitcher"])
 	heatmap_files: Dict[str, str] = {}
+	if can_plot:
+		sns.set_theme(style="whitegrid")
+		totals = (
+			tendencies_long[["Pitcher", "PitchCount"]]
+			.groupby("Pitcher", as_index=False)
+			.sum()
+			.rename(columns={"PitchCount": "TotalPitches"})
+		)
+		eligible = set(totals.loc[totals["TotalPitches"] >= min_heatmap_pitches, "Pitcher"])
 
-	for pitcher, grp in tendencies_long.groupby("Pitcher"):
-		if pitcher not in eligible:
-			continue
-		pivot = grp.pivot_table(index="PitchType", columns="Count", values="ProbabilityPct", fill_value=0)
-		ordered_cols = [c for c in ALL_COUNTS if c in pivot.columns]
-		pivot = pivot.reindex(columns=ordered_cols)
-		fig, ax = plt.subplots(figsize=(12, 4))
-		sns.heatmap(pivot, annot=True, fmt=".1f", cmap="Blues", linewidths=0.3, ax=ax)
-		ax.set_title(f"{pitcher} - Pitch Type % by Count")
-		plt.tight_layout()
-		safe_name = "".join(ch for ch in pitcher if ch.isalnum() or ch in ("_", "-", " ")).strip().replace(" ", "_")
-		img_path = heatmap_dir / f"{safe_name}_count_heatmap.png"
-		fig.savefig(img_path, dpi=130)
-		plt.close(fig)
-		heatmap_files[pitcher] = f"outputs/heatmaps/{safe_name}_count_heatmap.png"
+		for pitcher, grp in tendencies_long.groupby("Pitcher"):
+			if pitcher not in eligible:
+				continue
+			pivot = grp.pivot_table(index="PitchType", columns="Count", values="ProbabilityPct", fill_value=0)
+			ordered_cols = [c for c in ALL_COUNTS if c in pivot.columns]
+			pivot = pivot.reindex(columns=ordered_cols)
+			fig, ax = plt.subplots(figsize=(12, 4))
+			sns.heatmap(pivot, annot=True, fmt=".1f", cmap="Blues", linewidths=0.3, ax=ax)
+			ax.set_title(f"{pitcher} - Pitch Type % by Count")
+			plt.tight_layout()
+			safe_name = "".join(ch for ch in pitcher if ch.isalnum() or ch in ("_", "-", " ")).strip().replace(" ", "_")
+			img_path = heatmap_dir / f"{safe_name}_count_heatmap.png"
+			fig.savefig(img_path, dpi=130)
+			plt.close(fig)
+			heatmap_files[pitcher] = f"outputs/heatmaps/{safe_name}_count_heatmap.png"
+	else:
+		print("[WARN] Heatmaps skipped in data.js: matplotlib/seaborn not available.")
 
 	def _df_to_list(df: pd.DataFrame) -> list:
 		return json.loads(df.to_json(orient="records", default_handler=str))
@@ -685,28 +702,31 @@ def generate_html_dashboard(
 
 	# ---- encode heatmaps as base64 so the HTML is fully self-contained ----
 	images: Dict[str, str] = {}
-	sns.set_theme(style="whitegrid")
-	totals = (
-		tendencies_long[["Pitcher", "PitchCount"]]
-		.groupby("Pitcher", as_index=False)
-		.sum()
-		.rename(columns={"PitchCount": "TotalPitches"})
-	)
-	eligible = set(totals.loc[totals["TotalPitches"] >= 15, "Pitcher"])
-	for pitcher, grp in tendencies_long.groupby("Pitcher"):
-		if pitcher not in eligible:
-			continue
-		pivot = grp.pivot_table(index="PitchType", columns="Count", values="ProbabilityPct", fill_value=0)
-		ordered_cols = [c for c in ALL_COUNTS if c in pivot.columns]
-		pivot = pivot.reindex(columns=ordered_cols)
-		fig, ax = plt.subplots(figsize=(12, 4))
-		sns.heatmap(pivot, annot=True, fmt=".1f", cmap="Blues", linewidths=0.3, ax=ax)
-		ax.set_title(f"{pitcher} – Pitch Type % by Count")
-		plt.tight_layout()
-		buf = io.BytesIO()
-		fig.savefig(buf, format="png", dpi=130)
-		plt.close(fig)
-		images[pitcher] = base64.b64encode(buf.getvalue()).decode()
+	if plt is not None and sns is not None:
+		sns.set_theme(style="whitegrid")
+		totals = (
+			tendencies_long[["Pitcher", "PitchCount"]]
+			.groupby("Pitcher", as_index=False)
+			.sum()
+			.rename(columns={"PitchCount": "TotalPitches"})
+		)
+		eligible = set(totals.loc[totals["TotalPitches"] >= 15, "Pitcher"])
+		for pitcher, grp in tendencies_long.groupby("Pitcher"):
+			if pitcher not in eligible:
+				continue
+			pivot = grp.pivot_table(index="PitchType", columns="Count", values="ProbabilityPct", fill_value=0)
+			ordered_cols = [c for c in ALL_COUNTS if c in pivot.columns]
+			pivot = pivot.reindex(columns=ordered_cols)
+			fig, ax = plt.subplots(figsize=(12, 4))
+			sns.heatmap(pivot, annot=True, fmt=".1f", cmap="Blues", linewidths=0.3, ax=ax)
+			ax.set_title(f"{pitcher} – Pitch Type % by Count")
+			plt.tight_layout()
+			buf = io.BytesIO()
+			fig.savefig(buf, format="png", dpi=130)
+			plt.close(fig)
+			images[pitcher] = base64.b64encode(buf.getvalue()).decode()
+	else:
+		print("[WARN] Embedded heatmaps skipped: matplotlib/seaborn not available.")
 
 	# ---- serialise DataFrames to JSON for the JS layer ----
 	def df_to_json(df: pd.DataFrame) -> str:
