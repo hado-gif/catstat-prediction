@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>⚾ Pitch Tendency Dashboard</title>
+  <style>
+    :root {
+      --navy:  #1a3a5c;
+      --blue:  #1a5fa8;
+      --light: #eef4fb;
+      --border:#cddcee;
+      --bg:    #f0f4f8;
+      --text:  #1e2a38;
+      --muted: #6b7a8d;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+
+    /* ── Header ── */
+    header {
+      background: var(--navy);
+      color: #fff;
+      padding: 20px 32px;
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; }
+    header p  { font-size: 0.82rem; opacity: 0.72; margin-top: 4px; }
+
+    /* ── Tabs ── */
+    #tab-nav {
+      background: #fff;
+      border-bottom: 2px solid var(--border);
+      display: flex;
+      padding: 0 32px;
+    }
+    .tab-btn {
+      padding: 14px 22px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--muted);
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-btn:hover        { color: var(--blue); }
+    .tab-btn.active       { color: var(--blue); border-color: var(--blue); }
+
+    /* ── Panels ── */
+    .tab-panel          { display: none; padding: 28px 32px; }
+    .tab-panel.active   { display: block; }
+    .panel-title        { font-size: 1.05rem; font-weight: 700; color: var(--navy); margin-bottom: 18px; }
+
+    /* ── Controls ── */
+    .controls         { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; align-items: flex-end; }
+    .ctrl             { display: flex; flex-direction: column; gap: 5px; }
+    .ctrl label       { font-size: 0.74rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .ctrl input,
+    .ctrl select      { padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 0.9rem; background: #fff; color: var(--text); outline: none; min-width: 200px; }
+    .ctrl input:focus,
+    .ctrl select:focus { border-color: var(--blue); }
+
+    /* ── Table ── */
+    .table-wrap      { overflow-x: auto; border-radius: 10px; box-shadow: 0 1px 6px rgba(0,0,0,.09); }
+    table            { width: 100%; border-collapse: collapse; background: #fff; font-size: 0.85rem; }
+    thead th         { background: var(--navy); color: #fff; padding: 11px 14px; text-align: left; font-weight: 600; white-space: nowrap; }
+    tbody tr:nth-child(even) { background: var(--light); }
+    tbody tr:hover   { background: #dde8f5; }
+    tbody td         { padding: 9px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .pct             { font-weight: 700; color: var(--blue); }
+    .pitcher-name    { font-weight: 600; }
+    .count-cell      { display: inline-block; padding: 2px 8px; border-radius: 12px; background: var(--light); font-weight: 700; color: var(--navy); font-size: 0.82rem; }
+    .badge           { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; }
+    .pos             { color: #155724; font-weight: 700; }
+    .neg             { color: #721c24; font-weight: 700; }
+    .interp          { white-space: normal !important; min-width: 220px; max-width: 340px; line-height: 1.45; }
+
+    /* ── Heatmap grid ── */
+    #heatmap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(560px, 1fr)); gap: 20px; }
+    .heatmap-card { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 16px; box-shadow: 0 1px 5px rgba(0,0,0,.07); }
+    .heatmap-card h3 { font-size: 0.9rem; color: var(--navy); margin-bottom: 10px; font-weight: 700; }
+    .heatmap-card img { width: 100%; border-radius: 5px; }
+    .empty { color: var(--muted); font-size: 0.9rem; padding: 20px 0; }
+
+    /* ── Error banner ── */
+    #error-banner { display: none; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 8px; margin: 24px 32px; padding: 16px 20px; font-size: 0.95rem; line-height: 1.6; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚾ Pitch Tendency Dashboard</h1>
+  <p>A-10 Trackman Data &middot; Pitcher selection patterns by count</p>
+</header>
+
+<div id="error-banner"></div>
+
+<nav id="tab-nav">
+  <button class="tab-btn active" data-target="tab-profiles">Pitcher Profiles</button>
+  <button class="tab-btn" data-target="tab-heatmaps">Heatmaps</button>
+  <button class="tab-btn" data-target="tab-team">Team Trends</button>
+  <button class="tab-btn" data-target="tab-strategy">Strategy Context</button>
+</nav>
+
+<!-- PITCHER PROFILES -->
+<div id="tab-profiles" class="tab-panel active">
+  <p class="panel-title">Pitcher Pitch-Type Probability by Count</p>
+  <div class="controls">
+    <div class="ctrl">
+      <label>Search Pitcher</label>
+      <input type="text" id="pitcher-search" placeholder="Type name…" />
+    </div>
+    <div class="ctrl">
+      <label>Count</label>
+      <select id="count-filter"><option value="">All Counts</option></select>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table id="profiles-table"><thead></thead><tbody></tbody></table>
+  </div>
+</div>
+
+<!-- HEATMAPS -->
+<div id="tab-heatmaps" class="tab-panel">
+  <p class="panel-title">Heatmaps — Pitch % by Count (per pitcher)</p>
+  <div class="controls">
+    <div class="ctrl">
+      <label>Search Pitcher</label>
+      <input type="text" id="heatmap-search" placeholder="Type name…" />
+    </div>
+  </div>
+  <div id="heatmap-grid"></div>
+</div>
+
+<!-- TEAM TRENDS -->
+<div id="tab-team" class="tab-panel">
+  <p class="panel-title">Team-Level Pitch Tendencies by Count</p>
+  <div class="controls">
+    <div class="ctrl">
+      <label>Count</label>
+      <select id="team-count-filter"><option value="">All Counts</option></select>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table id="team-table"><thead></thead><tbody></tbody></table>
+  </div>
+</div>
+
+<!-- STRATEGY CONTEXT -->
+<div id="tab-strategy" class="tab-panel">
+  <p class="panel-title">Strategy Context — How Each Pitcher Compares to Count Norms</p>
+  <div class="controls">
+    <div class="ctrl">
+      <label>Pitcher</label>
+      <select id="strategy-pitcher"><option value="">All Pitchers</option></select>
+    </div>
+    <div class="ctrl">
+      <label>Count Leverage</label>
+      <select id="strategy-leverage"><option value="">All</option></select>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table id="strategy-table"><thead></thead><tbody></tbody></table>
+  </div>
+</div>
+
+<script src="outputs/data.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>
