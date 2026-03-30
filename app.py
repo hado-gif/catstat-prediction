@@ -1,20 +1,27 @@
 from __future__ import annotations
 
+import importlib.util
 from io import BytesIO
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 import streamlit as st
 
-from parser import (
-    ALL_COUNTS,
-    build_pitcher_count_tendencies,
-    build_research_context_report,
-    build_team_level_trends,
-    filter_data_by_team_query,
-    standardize_trackman_columns,
-)
+_PARSER_PATH = Path(__file__).resolve().with_name("parser.py")
+_SPEC = importlib.util.spec_from_file_location("local_parser", _PARSER_PATH)
+if _SPEC is None or _SPEC.loader is None:
+    raise RuntimeError(f"Could not load parser module from {_PARSER_PATH}")
+_PARSER = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_PARSER)
+
+ALL_COUNTS = _PARSER.ALL_COUNTS
+build_pitcher_count_tendencies = _PARSER.build_pitcher_count_tendencies
+build_research_context_report = _PARSER.build_research_context_report
+build_team_level_trends = _PARSER.build_team_level_trends
+filter_data_by_team_query = _PARSER.filter_data_by_team_query
+standardize_trackman_columns = _PARSER.standardize_trackman_columns
 
 
 st.set_page_config(page_title="Pitch Tendency App", layout="wide")
