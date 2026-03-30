@@ -1,27 +1,42 @@
 from __future__ import annotations
 
 import importlib.util
+import traceback
 from io import BytesIO
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import pandas as pd
-import seaborn as sns
 import streamlit as st
 
-_PARSER_PATH = Path(__file__).resolve().with_name("parser.py")
-_SPEC = importlib.util.spec_from_file_location("local_parser", _PARSER_PATH)
-if _SPEC is None or _SPEC.loader is None:
-    raise RuntimeError(f"Could not load parser module from {_PARSER_PATH}")
-_PARSER = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(_PARSER)
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    _PLOTTING_OK = True
+except Exception:
+    plt = None  # type: ignore[assignment]
+    sns = None  # type: ignore[assignment]
+    _PLOTTING_OK = False
 
-ALL_COUNTS = _PARSER.ALL_COUNTS
-build_pitcher_count_tendencies = _PARSER.build_pitcher_count_tendencies
-build_research_context_report = _PARSER.build_research_context_report
-build_team_level_trends = _PARSER.build_team_level_trends
-filter_data_by_team_query = _PARSER.filter_data_by_team_query
-standardize_trackman_columns = _PARSER.standardize_trackman_columns
+_PARSER_PATH = Path(__file__).resolve().with_name("parser.py")
+try:
+    _SPEC = importlib.util.spec_from_file_location("local_parser", _PARSER_PATH)
+    if _SPEC is None or _SPEC.loader is None:
+        raise RuntimeError(f"Could not load parser module from {_PARSER_PATH}")
+    _PARSER = importlib.util.module_from_spec(_SPEC)
+    _SPEC.loader.exec_module(_PARSER)
+
+    ALL_COUNTS = _PARSER.ALL_COUNTS
+    build_pitcher_count_tendencies = _PARSER.build_pitcher_count_tendencies
+    build_research_context_report = _PARSER.build_research_context_report
+    build_team_level_trends = _PARSER.build_team_level_trends
+    filter_data_by_team_query = _PARSER.filter_data_by_team_query
+    standardize_trackman_columns = _PARSER.standardize_trackman_columns
+except Exception as exc:
+    st.set_page_config(page_title="Pitch Tendency App", layout="wide")
+    st.title("⚾ Pitch Tendency App")
+    st.error(f"App startup failed while loading parser.py: {exc}")
+    st.code(traceback.format_exc())
+    st.stop()
 
 
 st.set_page_config(page_title="Pitch Tendency App", layout="wide")
@@ -148,6 +163,8 @@ with tab_heatmaps:
     pitchers = sorted(tendencies_long["Pitcher"].dropna().unique().tolist())
     if not pitchers:
         st.info("No pitchers found.")
+    elif not _PLOTTING_OK:
+        st.warning("Heatmaps are unavailable because plotting libraries failed to load.")
     else:
         pitcher = st.selectbox("Pitcher", pitchers)
         subset = tendencies_long[tendencies_long["Pitcher"] == pitcher]
