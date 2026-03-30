@@ -5,8 +5,17 @@ import traceback
 from io import BytesIO
 from pathlib import Path
 
-import pandas as pd
 import streamlit as st
+
+st.set_page_config(page_title="Pitch Tendency App", layout="wide")
+
+try:
+    import pandas as pd
+except Exception as exc:
+    st.title("⚾ Pitch Tendency App")
+    st.error(f"Startup failed while importing pandas: {exc}")
+    st.code(traceback.format_exc())
+    st.stop()
 
 try:
     import matplotlib.pyplot as plt
@@ -39,7 +48,6 @@ except Exception as exc:
     st.stop()
 
 
-st.set_page_config(page_title="Pitch Tendency App", layout="wide")
 st.title("⚾ Pitch Tendency App")
 st.caption("Upload Trackman CSV files, filter by team acronym/name, and view pitcher tendencies.")
 
