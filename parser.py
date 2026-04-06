@@ -246,6 +246,23 @@ def standardize_trackman_columns(raw: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[
 	return data, {k: v for k, v in mapping.items() if v is not None}
 
 
+def filter_data_by_team_query(clean_data: pd.DataFrame, team_query: str) -> pd.DataFrame:
+	"""Filter rows by team acronym/name match across known team columns."""
+	query = (team_query or "").strip().lower()
+	if not query:
+		return clean_data
+
+	df = clean_data.copy()
+	mask = pd.Series(False, index=df.index)
+	for col in ["HomeTeam", "AwayTeam", "PitcherTeam"]:
+		if col in df.columns:
+			vals = df[col].astype(str).str.lower()
+			mask = mask | vals.str.contains(query, na=False)
+
+	filtered = df[mask].copy()
+	return filtered
+
+
 def build_pitcher_count_tendencies(clean_data: pd.DataFrame, min_pitches: int = 1) -> pd.DataFrame:
 	"""Compute pitcher-by-count pitch type frequencies and probabilities."""
 	df = clean_data.copy()

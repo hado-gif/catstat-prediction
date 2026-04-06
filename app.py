@@ -18,6 +18,8 @@ except Exception as exc:
     st.stop()
 
 try:
+    import matplotlib
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import seaborn as sns
     _PLOTTING_OK = True
@@ -41,7 +43,6 @@ try:
     filter_data_by_team_query = _PARSER.filter_data_by_team_query
     standardize_trackman_columns = _PARSER.standardize_trackman_columns
 except Exception as exc:
-    st.set_page_config(page_title="Pitch Tendency App", layout="wide")
     st.title("⚾ Pitch Tendency App")
     st.error(f"App startup failed while loading parser.py: {exc}")
     st.code(traceback.format_exc())
