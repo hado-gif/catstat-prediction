@@ -7,10 +7,16 @@ from pathlib import Path
 
 import streamlit as st
 
+
+def _log(message: str) -> None:
+    print(message, flush=True)
+
 st.set_page_config(page_title="Pitch Tendency App", layout="wide")
+_log("[startup] streamlit page configured")
 
 try:
     import pandas as pd
+    _log("[startup] pandas imported")
 except Exception as exc:
     st.title("⚾ Pitch Tendency App")
     st.error(f"Startup failed while importing pandas: {exc}")
@@ -23,13 +29,16 @@ try:
     import matplotlib.pyplot as plt
     import seaborn as sns
     _PLOTTING_OK = True
+    _log("[startup] plotting libraries imported")
 except Exception:
     plt = None  # type: ignore[assignment]
     sns = None  # type: ignore[assignment]
     _PLOTTING_OK = False
+    _log("[startup] plotting libraries unavailable")
 
 _PARSER_PATH = Path(__file__).resolve().with_name("parser.py")
 try:
+    _log(f"[startup] loading parser module from {_PARSER_PATH}")
     _SPEC = importlib.util.spec_from_file_location("local_parser", _PARSER_PATH)
     if _SPEC is None or _SPEC.loader is None:
         raise RuntimeError(f"Could not load parser module from {_PARSER_PATH}")
@@ -42,6 +51,7 @@ try:
     build_team_level_trends = _PARSER.build_team_level_trends
     filter_data_by_team_query = _PARSER.filter_data_by_team_query
     standardize_trackman_columns = _PARSER.standardize_trackman_columns
+    _log("[startup] parser module loaded")
 except Exception as exc:
     st.title("⚾ Pitch Tendency App")
     st.error(f"App startup failed while loading parser.py: {exc}")

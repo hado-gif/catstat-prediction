@@ -1,6 +1,5 @@
 [server]
 maxUploadSize = 300
-enableCORS = false
 enableXsrfProtection = true
 
 [theme]
