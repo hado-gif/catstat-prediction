@@ -7,15 +7,21 @@
 
   // ── Guard: check data loaded ─────────────────────────────────────────────
   const banner = document.getElementById('error-banner');
-  const D = window.PITCH_DATA;
-  if (!D) {
+  const rawData = window.PITCH_DATA;
+  const D = {
+    pitchers: Array.isArray(rawData && rawData.pitchers) ? rawData.pitchers : [],
+    allCounts: Array.isArray(rawData && rawData.allCounts) ? rawData.allCounts : [],
+    dataLong: Array.isArray(rawData && rawData.dataLong) ? rawData.dataLong : [],
+    teamTrends: Array.isArray(rawData && rawData.teamTrends) ? rawData.teamTrends : [],
+    researchContext: Array.isArray(rawData && rawData.researchContext) ? rawData.researchContext : [],
+    heatmapFiles: rawData && rawData.heatmapFiles && typeof rawData.heatmapFiles === 'object' ? rawData.heatmapFiles : {}
+  };
+
+  if (!rawData || !D.dataLong.length) {
     banner.style.display = 'block';
     banner.innerHTML =
-      '<strong>⚠ No data loaded.</strong><br>' +
-      'Run <code>parser.py</code> and choose option 2 (Live view) to generate <code>outputs/data.js</code>.' +
-      ' Then refresh this page.';
-    document.getElementById('tab-nav').style.display = 'none';
-    return;
+      '<strong>⚠ Dashboard data is missing.</strong><br>' +
+      'Generate it with <code>python3 parser.py --all --live</code> (or <code>python parser.py --all --live</code>), then redeploy/refresh.';
   }
 
   // ── Tab switching ────────────────────────────────────────────────────────

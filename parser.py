@@ -1,23 +1,15 @@
 from __future__ import annotations
 
 import argparse
-import http.server
-import socketserver
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
-try:
-	import matplotlib.pyplot as plt
-except Exception:
-	plt = None  # type: ignore[assignment]
-
-try:
-	import seaborn as sns
-except Exception:
-	sns = None  # type: ignore[assignment]
+import seaborn as sns
 
 
 # All legal pre-pitch count states for MLB/NCAA baseball.
@@ -231,7 +223,6 @@ def standardize_trackman_columns(raw: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[
 	data["Count"] = [build_count_string(b, s) for b, s in zip(data["Balls"], data["Strikes"])]
 
 	# Optional context columns.
-	data["PitcherTeam"] = raw[mapping["pitcher_team"]] if mapping["pitcher_team"] else np.nan
 	data["PitchCall"] = raw[mapping["pitch_call"]] if mapping["pitch_call"] else np.nan
 	data["Outs"] = raw[mapping["outs"]] if mapping["outs"] else np.nan
 	data["Inning"] = raw[mapping["inning"]] if mapping["inning"] else np.nan
@@ -253,80 +244,6 @@ def standardize_trackman_columns(raw: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[
 		data["PitcherHomeAway"] = "Unknown"
 
 	return data, {k: v for k, v in mapping.items() if v is not None}
-
-
-def filter_data_by_team_query(clean_data: pd.DataFrame, team_query: Optional[str]) -> pd.DataFrame:
-	"""
-	Filter rows to a team query across PitcherTeam/HomeTeam/AwayTeam.
-
-	The query is case-insensitive and supports partial matches, so users can
-	type either acronym (e.g., "VCU") or full/partial names.
-	"""
-	if team_query is None:
-		return clean_data
-
-	query = team_query.strip()
-	if not query:
-		return clean_data
-
-	team_cols = [c for c in ["PitcherTeam", "HomeTeam", "AwayTeam"] if c in clean_data.columns]
-	if not team_cols:
-		print("[WARN] Team filter skipped: no team columns found (PitcherTeam/HomeTeam/AwayTeam).")
-		return clean_data
-
-	q = query.lower()
-	mask = pd.Series(False, index=clean_data.index)
-	matched_labels: set[str] = set()
-
-	for col in team_cols:
-		series = clean_data[col].fillna("").astype(str).str.strip()
-		col_mask = series.str.lower().str.contains(q, regex=False)
-		mask = mask | col_mask
-		matched_labels.update(series[col_mask].unique().tolist())
-
-	filtered = clean_data.loc[mask].copy()
-	if filtered.empty:
-		raise ValueError(
-			f"No rows matched team query '{query}'. Try a broader acronym/name or remove --team."
-		)
-
-	matched_display = sorted([m for m in matched_labels if m])
-	preview = ", ".join(matched_display[:8])
-	if len(matched_display) > 8:
-		preview += ", ..."
-	print(
-		f"Applied team filter '{query}': {len(filtered):,} rows matched across {len(matched_display):,} team label(s)"
-		+ (f" [{preview}]" if preview else "")
-	)
-	return filtered
-
-
-def serve_dashboard_locally(project_dir: Path, port: int = 8000) -> None:
-	"""Serve dashboard.html locally so users do not need VS Code Live Server."""
-	dashboard_file = project_dir / "dashboard.html"
-	if not dashboard_file.exists():
-		raise FileNotFoundError(f"dashboard.html not found in {project_dir}")
-
-	url = f"http://127.0.0.1:{port}/dashboard.html"
-	handler = lambda *args, **kwargs: http.server.SimpleHTTPRequestHandler(  # noqa: E731
-		*args, directory=str(project_dir), **kwargs
-	)
-
-	with socketserver.TCPServer(("127.0.0.1", port), handler) as httpd:
-		print()
-		print("=" * 60)
-		print(" Local dashboard server running")
-		print(f" Open in browser: {url}")
-		print(" Press Ctrl+C to stop the server")
-		print("=" * 60)
-		print()
-		import webbrowser
-
-		webbrowser.open(url)
-		try:
-			httpd.serve_forever()
-		except KeyboardInterrupt:
-			print("\nDashboard server stopped.")
 
 
 def build_pitcher_count_tendencies(clean_data: pd.DataFrame, min_pitches: int = 1) -> pd.DataFrame:
@@ -536,10 +453,6 @@ def save_pitcher_heatmaps(
 	min_total_pitches_per_pitcher: int = 25,
 ) -> None:
 	"""Save one heatmap per pitcher showing pitch-type probability by count."""
-	if plt is None or sns is None:
-		print("[WARN] Heatmap generation skipped: matplotlib/seaborn not available.")
-		return
-
 	output_dir.mkdir(parents=True, exist_ok=True)
 	sns.set_theme(style="whitegrid")
 
@@ -623,43 +536,38 @@ def generate_data_js(
 	"""
 	import json
 
-	can_plot = plt is not None and sns is not None
-	if can_plot:
-		import matplotlib
-		matplotlib.use("Agg")
+	import matplotlib
+	matplotlib.use("Agg")
 
 	output_dir.mkdir(parents=True, exist_ok=True)
 	heatmap_dir = output_dir / "heatmaps"
 	heatmap_dir.mkdir(parents=True, exist_ok=True)
 
+	sns.set_theme(style="whitegrid")
+	totals = (
+		tendencies_long[["Pitcher", "PitchCount"]]
+		.groupby("Pitcher", as_index=False)
+		.sum()
+		.rename(columns={"PitchCount": "TotalPitches"})
+	)
+	eligible = set(totals.loc[totals["TotalPitches"] >= min_heatmap_pitches, "Pitcher"])
 	heatmap_files: Dict[str, str] = {}
-	if can_plot:
-		sns.set_theme(style="whitegrid")
-		totals = (
-			tendencies_long[["Pitcher", "PitchCount"]]
-			.groupby("Pitcher", as_index=False)
-			.sum()
-			.rename(columns={"PitchCount": "TotalPitches"})
-		)
-		eligible = set(totals.loc[totals["TotalPitches"] >= min_heatmap_pitches, "Pitcher"])
 
-		for pitcher, grp in tendencies_long.groupby("Pitcher"):
-			if pitcher not in eligible:
-				continue
-			pivot = grp.pivot_table(index="PitchType", columns="Count", values="ProbabilityPct", fill_value=0)
-			ordered_cols = [c for c in ALL_COUNTS if c in pivot.columns]
-			pivot = pivot.reindex(columns=ordered_cols)
-			fig, ax = plt.subplots(figsize=(12, 4))
-			sns.heatmap(pivot, annot=True, fmt=".1f", cmap="Blues", linewidths=0.3, ax=ax)
-			ax.set_title(f"{pitcher} - Pitch Type % by Count")
-			plt.tight_layout()
-			safe_name = "".join(ch for ch in pitcher if ch.isalnum() or ch in ("_", "-", " ")).strip().replace(" ", "_")
-			img_path = heatmap_dir / f"{safe_name}_count_heatmap.png"
-			fig.savefig(img_path, dpi=130)
-			plt.close(fig)
-			heatmap_files[pitcher] = f"outputs/heatmaps/{safe_name}_count_heatmap.png"
-	else:
-		print("[WARN] Heatmaps skipped in data.js: matplotlib/seaborn not available.")
+	for pitcher, grp in tendencies_long.groupby("Pitcher"):
+		if pitcher not in eligible:
+			continue
+		pivot = grp.pivot_table(index="PitchType", columns="Count", values="ProbabilityPct", fill_value=0)
+		ordered_cols = [c for c in ALL_COUNTS if c in pivot.columns]
+		pivot = pivot.reindex(columns=ordered_cols)
+		fig, ax = plt.subplots(figsize=(12, 4))
+		sns.heatmap(pivot, annot=True, fmt=".1f", cmap="Blues", linewidths=0.3, ax=ax)
+		ax.set_title(f"{pitcher} - Pitch Type % by Count")
+		plt.tight_layout()
+		safe_name = "".join(ch for ch in pitcher if ch.isalnum() or ch in ("_", "-", " ")).strip().replace(" ", "_")
+		img_path = heatmap_dir / f"{safe_name}_count_heatmap.png"
+		fig.savefig(img_path, dpi=130)
+		plt.close(fig)
+		heatmap_files[pitcher] = f"outputs/heatmaps/{safe_name}_count_heatmap.png"
 
 	def _df_to_list(df: pd.DataFrame) -> list:
 		return json.loads(df.to_json(orient="records", default_handler=str))
@@ -702,31 +610,28 @@ def generate_html_dashboard(
 
 	# ---- encode heatmaps as base64 so the HTML is fully self-contained ----
 	images: Dict[str, str] = {}
-	if plt is not None and sns is not None:
-		sns.set_theme(style="whitegrid")
-		totals = (
-			tendencies_long[["Pitcher", "PitchCount"]]
-			.groupby("Pitcher", as_index=False)
-			.sum()
-			.rename(columns={"PitchCount": "TotalPitches"})
-		)
-		eligible = set(totals.loc[totals["TotalPitches"] >= 15, "Pitcher"])
-		for pitcher, grp in tendencies_long.groupby("Pitcher"):
-			if pitcher not in eligible:
-				continue
-			pivot = grp.pivot_table(index="PitchType", columns="Count", values="ProbabilityPct", fill_value=0)
-			ordered_cols = [c for c in ALL_COUNTS if c in pivot.columns]
-			pivot = pivot.reindex(columns=ordered_cols)
-			fig, ax = plt.subplots(figsize=(12, 4))
-			sns.heatmap(pivot, annot=True, fmt=".1f", cmap="Blues", linewidths=0.3, ax=ax)
-			ax.set_title(f"{pitcher} – Pitch Type % by Count")
-			plt.tight_layout()
-			buf = io.BytesIO()
-			fig.savefig(buf, format="png", dpi=130)
-			plt.close(fig)
-			images[pitcher] = base64.b64encode(buf.getvalue()).decode()
-	else:
-		print("[WARN] Embedded heatmaps skipped: matplotlib/seaborn not available.")
+	sns.set_theme(style="whitegrid")
+	totals = (
+		tendencies_long[["Pitcher", "PitchCount"]]
+		.groupby("Pitcher", as_index=False)
+		.sum()
+		.rename(columns={"PitchCount": "TotalPitches"})
+	)
+	eligible = set(totals.loc[totals["TotalPitches"] >= 15, "Pitcher"])
+	for pitcher, grp in tendencies_long.groupby("Pitcher"):
+		if pitcher not in eligible:
+			continue
+		pivot = grp.pivot_table(index="PitchType", columns="Count", values="ProbabilityPct", fill_value=0)
+		ordered_cols = [c for c in ALL_COUNTS if c in pivot.columns]
+		pivot = pivot.reindex(columns=ordered_cols)
+		fig, ax = plt.subplots(figsize=(12, 4))
+		sns.heatmap(pivot, annot=True, fmt=".1f", cmap="Blues", linewidths=0.3, ax=ax)
+		ax.set_title(f"{pitcher} – Pitch Type % by Count")
+		plt.tight_layout()
+		buf = io.BytesIO()
+		fig.savefig(buf, format="png", dpi=130)
+		plt.close(fig)
+		images[pitcher] = base64.b64encode(buf.getvalue()).decode()
 
 	# ---- serialise DataFrames to JSON for the JS layer ----
 	def df_to_json(df: pd.DataFrame) -> str:
@@ -984,9 +889,6 @@ def run_pipeline(
 	min_heatmap_pitches: int,
 	csv_files: Optional[List[Path]] = None,
 	live_mode: bool = False,
-	team_query: Optional[str] = None,
-	serve_dashboard: bool = False,
-	serve_port: int = 8000,
 ) -> None:
 	"""End-to-end execution for pitcher tendency analysis."""
 	if csv_files is None:
@@ -998,7 +900,6 @@ def run_pipeline(
 	raw = load_trackman_data(csv_files)
 	clean, col_map = standardize_trackman_columns(raw)
 	print("Using columns:", col_map)
-	clean = filter_data_by_team_query(clean, team_query)
 
 	tendencies_long = build_pitcher_count_tendencies(clean, min_pitches=min_count_sample)
 	if tendencies_long.empty:
@@ -1017,8 +918,6 @@ def run_pipeline(
 
 	if live_mode:
 		generate_data_js(tendencies_long, team_trends, research_context, output_dir, min_heatmap_pitches)
-		if serve_dashboard:
-			serve_dashboard_locally(data_dir, serve_port)
 	else:
 		write_outputs(tendencies_long, profile_wide, context_splits, team_trends, output_dir)
 		save_pitcher_heatmaps(tendencies_long, output_dir / "heatmaps", min_total_pitches_per_pitcher=min_heatmap_pitches)
@@ -1076,25 +975,6 @@ def parse_args() -> argparse.Namespace:
 		action="store_true",
 		help="Open an interactive HTML dashboard instead of writing files.",
 	)
-	parser.add_argument(
-		"--serve",
-		action="store_true",
-		help="Serve dashboard locally at http://127.0.0.1:<port>/dashboard.html (no VS Code needed). Implies live mode.",
-	)
-	parser.add_argument(
-		"--port",
-		type=int,
-		default=8000,
-		help="Port used with --serve (default: 8000).",
-	)
-	parser.add_argument(
-		"--team",
-		"--team-query",
-		dest="team_query",
-		type=str,
-		default=None,
-		help="Filter to rows where team fields contain this acronym/name (case-insensitive, partial match).",
-	)
 	return parser.parse_args()
 
 
@@ -1107,7 +987,7 @@ if __name__ == "__main__":
 		selected_files = interactive_file_picker(args.data_dir)
 
 	# Determine output mode
-	if args.live or args.serve:
+	if args.live:
 		live_mode = True
 	else:
 		print()
@@ -1129,7 +1009,4 @@ if __name__ == "__main__":
 		min_heatmap_pitches=args.min_heatmap_pitches,
 		csv_files=selected_files,
 		live_mode=live_mode,
-		team_query=args.team_query,
-		serve_dashboard=args.serve,
-		serve_port=args.port,
 	)

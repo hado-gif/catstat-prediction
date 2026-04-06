@@ -16,60 +16,6 @@ It analyzes Trackman CSV files and gives:
 
 ---
 
-## Run without VS Code (recommended for end users)
-
-Yes — users can run everything from a normal terminal and browser.
-
-One-command local web dashboard:
-
-```bash
-python3 parser.py --all --serve
-```
-
-What this does:
-
-1. Builds live dashboard data
-2. Starts a local web server
-3. Opens browser at `http://127.0.0.1:8000/dashboard.html`
-
-No VS Code extension is required for this mode.
-
----
-
-## App mode (simplest UX)
-
-This project now includes a Streamlit app at [app.py](app.py).
-
-Run locally:
-
-```bash
-python3 -m pip install -r requirements.txt
-streamlit run app.py
-```
-
-Users can then:
-
-1. Open the app URL shown in terminal
-2. Upload one or more CSV files
-3. Type team acronym/name in the Team filter
-4. Use tabs (Profiles, Heatmaps, Team Trends, Strategy Context)
-
-To send users a single public link, deploy the same app to Streamlit Community Cloud, Render, or Railway.
-
-Team-filtered example (acronym or name match):
-
-```bash
-python3 parser.py --all --serve --team VCU
-```
-
-or
-
-```bash
-python3 parser.py --all --serve --team "Saint Joseph"
-```
-
----
-
 ## Before you start
 
 You need these installed on your computer:
@@ -177,18 +123,6 @@ If Go Live does not appear:
 2. Reload VS Code window
 3. Reopen [dashboard.html](dashboard.html)
 
-Alternative (no VS Code):
-
-```bash
-python3 parser.py --all --serve
-```
-
-Optional team filter while loading CSVs:
-
-```bash
-python3 parser.py --all --serve --team "Dayton"
-```
-
 ### A3) What to use in dashboard
 
 1. **Pitcher Profiles tab**: search pitcher + filter by count
@@ -281,19 +215,6 @@ Live mode directly:
 
 ```bash
 python3 parser.py --all --live
-```
-
-Live mode + local web server (no VS Code):
-
-```bash
-python3 parser.py --all --serve
-```
-
-Filter by team acronym or team name while analyzing:
-
-```bash
-python3 parser.py --all --team URI
-python3 parser.py --all --team "Rhode Island"
 ```
 
 Run with sample filters:
