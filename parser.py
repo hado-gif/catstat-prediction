@@ -4,12 +4,13 @@ import argparse
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-import matplotlib.pyplot as plt
+
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib
 matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 
 # All legal pre-pitch count states for MLB/NCAA baseball.
